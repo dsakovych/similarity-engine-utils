@@ -130,3 +130,9 @@ dmypy.json
 
 # Idea
 .idea
+
+# debug folder
+tmp
+
+# test properties
+tests/*.toml

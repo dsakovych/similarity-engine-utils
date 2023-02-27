@@ -1,3 +1,9 @@
 build
 twine
 pip-tools
+flake8
+isort
+pytest >= 7.2.1
+coverage
+
+pymilvus >= 2.2.2

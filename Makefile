@@ -30,11 +30,17 @@ doc:
 	make -C docs clean html
 
 lint:
+	PYTHONPATH=`pwd` pylint --rcfile=pylint.conf src
+
+lint_fix:
 	flake8 src; \
 	isort src
 
-test:
-	pytest -v -s
+unittest:
+	PYTHONPATH=`pwd` python -m pytest tests -v
+
+coverage:
+	PYTHONPATH=`pwd` coverage run -m pytest tests -v; coverage report -m
 
 build:
 	python -m build; \

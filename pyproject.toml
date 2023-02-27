@@ -32,3 +32,9 @@ dev = ["pytest", "isort"]
 [project.urls]
 "Homepage" = "https://github.com/dsakovych/similarity-engine-utils"
 "Bug Tracker" = "https://github.com/dsakovych/similarity-engine-utils/issues"
+
+
+[tool.pytest.ini_options]
+pythonpath = [
+  "src"
+]
