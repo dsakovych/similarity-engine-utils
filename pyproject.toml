@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "similarity-engine-utils"
-version = "0.0.2"
+version = "0.0.3"
 description = "Similarity engine utils"
 authors = [
   { name="Dima S.", email="dima.sakovich@gmail.com" },
