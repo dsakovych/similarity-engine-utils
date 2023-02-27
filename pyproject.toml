@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "similarity-engine-utils"
-version = "0.0.1"
+version = "0.0.2"
 description = "Similarity engine utils"
 authors = [
   { name="Dima S.", email="dima.sakovich@gmail.com" },
@@ -18,7 +18,7 @@ classifiers = [
 ]
 keywords = ["se_utils"]
 dependencies = [
-    "requests",
+    "pymilvus >= 2.2.2",
     'tomli; python_version < "3.11"',
 ]
 requires-python = ">=3.9"
