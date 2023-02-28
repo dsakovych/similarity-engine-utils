@@ -1,6 +1,4 @@
 import sys
-import pytest
-
-from os.path import dirname, abspath
+from os.path import abspath, dirname
 
 sys.path.append(dirname(dirname(abspath(__file__))))

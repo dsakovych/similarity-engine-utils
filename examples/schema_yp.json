@@ -1,0 +1,62 @@
+[
+  {
+    "name": "id",
+    "dtype": "VARCHAR(256)",
+    "is_primary": true,
+    "description": "aws_filename"
+  },
+  {
+    "name": "biz_id",
+    "dtype": "INT64"
+  },
+  {
+    "name": "customer_id",
+    "dtype": "INT64"
+  },
+  {
+    "name": "year",
+    "dtype": "INT64"
+  },
+  {
+    "name": "month",
+    "dtype": "INT64"
+  },
+  {
+    "name": "day",
+    "dtype": "INT64"
+  },
+  {
+    "name": "mlflow_parent_run_id",
+    "dtype": "VARCHAR(256)"
+  },
+  {
+    "name": "mlflow_run_id",
+    "dtype": "VARCHAR(256)"
+  },
+  {
+    "name": "batch_id",
+    "dtype": "VARCHAR(256)"
+  },
+    {
+    "name": "mail_log_id",
+    "dtype": "INT64"
+  },
+  {
+    "name": "file_name",
+    "dtype": "VARCHAR(256)"
+  },
+  {
+    "name": "path",
+    "dtype": "VARCHAR(256)"
+  },
+  {
+    "name": "emb1",
+    "dtype": "FLOAT_VECTOR(1024)",
+    "descrition": "google/vit-large-patch16-224-in21k",
+    "index_params": {
+      "metric_type": "L2",
+      "index_type": "FLAT",
+      "params": {}
+    }
+  }
+]

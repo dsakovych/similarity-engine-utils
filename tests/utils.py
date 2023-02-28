@@ -1,5 +1,6 @@
-import random
+import json
 from importlib import resources
+
 try:
     import tomllib
 except ModuleNotFoundError:
@@ -14,3 +15,8 @@ def milvus_test_credentials():
         "port": cfg["milvus"]["port"]
     }
     return milvus_credentials
+
+
+def milvus_test_schema():
+    schema = json.loads(resources.read_text("examples", "schema_yp.json"))
+    return schema
