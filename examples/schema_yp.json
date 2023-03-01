@@ -15,15 +15,15 @@
   },
   {
     "name": "year",
-    "dtype": "INT64"
+    "dtype": "INT16"
   },
   {
     "name": "month",
-    "dtype": "INT64"
+    "dtype": "INT8"
   },
   {
     "name": "day",
-    "dtype": "INT64"
+    "dtype": "INT8"
   },
   {
     "name": "mlflow_parent_run_id",
@@ -51,7 +51,7 @@
   },
   {
     "name": "group_id",
-    "dtype": "INT64"
+    "dtype": "INT16"
   },
   {
     "name": "emb1",
