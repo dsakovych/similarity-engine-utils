@@ -6,39 +6,7 @@
     "description": "aws_filename"
   },
   {
-    "name": "biz_id",
-    "dtype": "INT64"
-  },
-  {
-    "name": "customer_id",
-    "dtype": "INT64"
-  },
-  {
-    "name": "year",
-    "dtype": "INT64"
-  },
-  {
-    "name": "month",
-    "dtype": "INT64"
-  },
-  {
-    "name": "day",
-    "dtype": "INT64"
-  },
-  {
-    "name": "mlflow_parent_run_id",
-    "dtype": "VARCHAR(256)"
-  },
-  {
-    "name": "mlflow_run_id",
-    "dtype": "VARCHAR(256)"
-  },
-  {
-    "name": "batch_id",
-    "dtype": "VARCHAR(256)"
-  },
-    {
-    "name": "mail_log_id",
+    "name": "group_id",
     "dtype": "INT64"
   },
   {

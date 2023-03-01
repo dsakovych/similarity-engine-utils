@@ -6,8 +6,9 @@ import requests
 from pymilvus import (Collection, CollectionSchema, DataType, FieldSchema,
                       connections, utility)
 
-from ...exceptions import BadCredentialsError, SchemaValidationError
-from .conf import DEFAULT_SCHEMA_URL
+from ...exceptions import (BadCredentialsError, MilvusInsertDataSchemaError,
+                           SchemaValidationError)
+from .conf import DEFAULT_SCHEMA_URL, DEFAULT_SEARCH_PARAMS
 
 
 def setup_connection(milvus_credentials: dict):
@@ -55,10 +56,9 @@ def read_schema_json(x: str):
 
 
 def validate_schema(schema: list[dict]):
-    # todo: replace prints with extended logs
     pk, msg = None, None
     available_keys = {'name', 'dtype', 'is_primary', 'description',
-                      'descrition', 'index_params'}  # todo: remove descrition
+                      'index_params'}
     for item in schema:
         keys = set(item.keys())
         if not keys.issubset(available_keys):
@@ -138,7 +138,6 @@ def create_milvus_collection(
         else:
             collection = Collection(collection_name)
             return collection
-    print(schema)
     collection = Collection(name=collection_name, schema=schema)
 
     for field_name, index_params in indices.items():
@@ -147,66 +146,113 @@ def create_milvus_collection(
     return collection
 
 
-def construct_milvus_record(
-        id,
-        args,
-        path,
-        embedding,
-        metadata
-):
-    data = [
-        [id],
-        [int(args['biz_id'])],
-        [int(args['customer_id'])],
-        [int(args['year'])],
-        [int(args['month'])],
-        [int(args['day'])],
-        [args.get('mlflow_parent_run_id', '')],
-        [args.get('mlflow_run_id', '')],
-        [args['batch_id']],
-        [int(args['mail_log_id'])],
-        [args['file_name']],
-        [path],
-        embedding,
-        [metadata]
-    ]
-    return data
+def df2milvus(df, collection_name):
+    collection = Collection(collection_name)
+    collection_fields = {_.name for _ in collection.schema.fields}
+    data_fields = set(df.columns)
+
+    if data_fields == collection_fields:
+        collection.insert(df)
+        return True
+    if collection_fields - data_fields:
+        msg = f"Such fields are absent in provided df: {collection_fields - data_fields}"
+    elif data_fields - collection_fields:
+        msg = f"Such fields are redundant in provided df: {data_fields - collection_fields}"
+    else:
+        msg = f"No data fields provided: {data_fields}"
+    raise MilvusInsertDataSchemaError(message=msg)
 
 
-def search_similar_vectors(
+def search_similar_vector(
         collection_name,
-        emb_name,
+        field_name,
         data,
-        biz_id,
-        search_params: dict = None
+        output_fields,
+        limit=10,
+        expr=None,
+        search_params=DEFAULT_SEARCH_PARAMS
+
 ):
     collection = Collection(collection_name)
     collection.load()
-
-    if search_params is None:
-        search_params = {"metric_type": "L2", "params": {"nprobe": 1},
-                         "offset": 1}
 
     results = collection.search(
-        data=data,
-        anns_field=emb_name,
+        data=[data],
+        anns_field=field_name,
         param=search_params,
-        limit=10,
-        expr=f"biz_id in [{biz_id}]",
-        output_fields=['id', 'customer_id', 'path'],
+        limit=limit,
+        expr=expr,
+        output_fields=output_fields,
         consistency_level="Strong"
     )
-    return results
-
-
-def query_milvus_data(collection_name: str):
-    collection = Collection(collection_name)
-    collection.load()
-    res = collection.query(
-        expr="biz_id in [1]",
-        offset=0,
-        limit=10,
-        output_fields=["path", "customer_id"],
-        consistency_level="Strong"
-    )
+    res = [{
+        "distance": i.score,
+        "values": i.entity._row_data  # {i.entity.get(j) for j in output_fields}
+    }
+        for i in results[0]]
     return res
+
+
+# def construct_milvus_record(
+#         id,
+#         args,
+#         path,
+#         embedding,
+#         metadata
+# ):
+#     data = [
+#         [id],
+#         [int(args['biz_id'])],
+#         [int(args['customer_id'])],
+#         [int(args['year'])],
+#         [int(args['month'])],
+#         [int(args['day'])],
+#         [args.get('mlflow_parent_run_id', '')],
+#         [args.get('mlflow_run_id', '')],
+#         [args['batch_id']],
+#         [int(args['mail_log_id'])],
+#         [args['file_name']],
+#         [path],
+#         embedding,
+#         [metadata]
+#     ]
+#     return data
+#
+#
+# def search_similar_vectors(
+#         collection_name,
+#         emb_name,
+#         data,
+#         biz_id,
+#         search_params: dict = None
+# ):
+#     collection = Collection(collection_name)
+#     collection.load()
+#
+#     if search_params is None:
+#         search_params = {"metric_type": "L2", "params": {"nprobe": 1},
+#                          "offset": 1}
+#
+#     results = collection.search(
+#         data=data,
+#         anns_field=emb_name,
+#         param=search_params,
+#         limit=10,
+#         expr=f"biz_id in [{biz_id}]",
+#         output_fields=['id', 'customer_id', 'path'],
+#         consistency_level="Strong"
+#     )
+#     return results
+#
+#
+# def query_milvus_data(collection_name: str):
+#     collection = Collection(collection_name)
+#     collection.load()
+#     res = collection.query(
+#         expr="biz_id in [1]",
+#         offset=0,
+#         limit=10,
+#         output_fields=["path", "customer_id"],
+#         consistency_level="Strong"
+#     )
+#     return res

@@ -135,4 +135,4 @@ dmypy.json
 tmp
 
 # test properties
-tests/*.toml
+tests/data/test_properties.toml

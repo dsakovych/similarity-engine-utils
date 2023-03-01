@@ -40,5 +40,10 @@ class SchemaParseError(SEUtilsException):
     """ Raise when couldn't parse schema file """
 
 
+class MilvusInsertDataSchemaError(SEUtilsException):
+    """ Raise when data fields to be inserted to milvus
+        do not coincide with milvus target collection """
+
+
 class ExceptionsMessage:
     BadCredentials = "provided credentials are incorrect"
