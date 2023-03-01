@@ -50,6 +50,10 @@
     "dtype": "VARCHAR(256)"
   },
   {
+    "name": "group_id",
+    "dtype": "INT64"
+  },
+  {
     "name": "emb1",
     "dtype": "FLOAT_VECTOR(1024)",
     "description": "google/vit-large-patch16-224-in21k",
