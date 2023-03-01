@@ -32,6 +32,10 @@ class BadCredentialsError(SEUtilsException):
     """ Raise when provided credentials are incorrect """
 
 
+class SchemaValidationError(SEUtilsException):
+    """ Raise when couldn't validate schema """
+
+
 class SchemaParseError(SEUtilsException):
     """ Raise when couldn't parse schema file """
 

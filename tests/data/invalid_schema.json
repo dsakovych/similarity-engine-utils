@@ -1,0 +1,16 @@
+[
+  {
+    "name": "id",
+    "dtype": "LOL[16]",
+    "is_primary": true,
+    "description": ""
+  },
+  {
+    "name": "emb1",
+    "dtype1": "OLOLO(1024)",
+    "descrition": "",
+    "index_params": {
+      "metric_type": "kek"
+    }
+  }
+]

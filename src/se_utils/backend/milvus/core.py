@@ -1,11 +1,13 @@
 import json
+import os.path
 import re
 
+import requests
 from pymilvus import (Collection, CollectionSchema, DataType, FieldSchema,
                       connections, utility)
 
-from ...exceptions import BadCredentialsError, SchemaParseError
-from .schema import DEFAULT_SCHEMA_PARAMETERS
+from ...exceptions import BadCredentialsError, SchemaValidationError
+from .conf import DEFAULT_SCHEMA_URL
 
 
 def setup_connection(milvus_credentials: dict):
@@ -25,7 +27,7 @@ def milvus_dtype_mapping(x: str):
 
     elif re.match(r"FLOAT_VECTOR\(\d+\)$", x):
         dim = re.findall(r".*\((\d+)\).*", x)[0]
-        res = {"dtype": DataType.VARCHAR, "dim": dim}
+        res = {"dtype": DataType.FLOAT_VECTOR, "dim": dim}
 
     elif re.match(r"INT\d+$", x):
         bits = int(re.findall(r".*?(\d+)", x)[0])
@@ -43,53 +45,61 @@ def milvus_dtype_mapping(x: str):
     return res
 
 
+def read_schema_json(x: str):
+    if os.path.exists(x):
+        with open(x) as f:
+            schema_json = json.load(f)
+    else:
+        schema_json = json.loads(x)
+    return schema_json
+
+
 def validate_schema(schema: list[dict]):
     # todo: replace prints with extended logs
-    pk = None
+    pk, msg = None, None
     available_keys = {'name', 'dtype', 'is_primary', 'description',
-                      'index_params'}
+                      'descrition', 'index_params'}  # todo: remove descrition
     for item in schema:
         keys = set(item.keys())
         if not keys.issubset(available_keys):
-            print(f"Wrong schema keys: {keys}")
-            return False
+            msg = f"Wrong schema keys: {keys}"
+            break
         if item.get('is_primary'):
             if pk is None:
                 pk = item['name']
             else:
-                print(
-                    f"Can't have more then 1 primary_key: `{pk}, {item['name']}`")
-                return False
+                msg = f"Can't have more then 1 primary_key: `{pk}, {item['name']}`"
+                break
         if re.match(r"FLOAT_VECTOR\(\d+\)$", item.get('dtype', '')):
             index_params_keys = {'metric_type', 'index_type', 'params'}
             if item.get('is_primary'):
-                print(f"Vector `{item['name']}` can't be a primary_key")
-                return False
+                msg = f"Vector `{item['name']}` can't be a primary_key"
+                break
             if not item.get('index_params'):
-                print(f"Vector `{item['name']}` doesn't have `index_params`")
-                return False
+                msg = f"Vector `{item['name']}` doesn't have `index_params`"
+                break
             keys = set(item.get('index_params').keys())
             if not keys.issubset(index_params_keys):
-                print(f"Vector `{item['name']} has wrong "
-                      f"index_params_keys keys: {keys}")
-                return False
+                msg = f"Vector `{item['name']} has wrong " \
+                      f"index_params_keys keys: {keys}"
+                break
+        try:
+            milvus_dtype_mapping(item['dtype'])
+        except ValueError as e:
+            msg = f"`dtype` validation error: {e}"
     if pk is None:
-        print("Primary key is absent")
-        return False
+        msg = "Primary key is absent"
+    if msg is not None:
+        raise SchemaValidationError(message=msg)
     return True
 
 
-def read_schema(path):
-    with open(path) as f:
-        schema_json = json.load(f)
-    if not validate_schema(schema_json):
-        raise SchemaParseError(
-            message="Couldn't parse schema.")  # todo: extend traceback
-
-    fields, index_params = [], []
-    for item in schema_json:
+def parse_schema(schema: list):
+    validate_schema(schema)
+    fields, index_params = [], {}
+    for item in schema:
         if item.get('index_params'):
-            index_params.append({item['name']: item['index_params']})
+            index_params.update({item['name']: item['index_params']})
             item.pop('index_params')
         item.update(milvus_dtype_mapping(item['dtype']))
         fields.append(FieldSchema(**item))
@@ -97,23 +107,22 @@ def read_schema(path):
     return fields, index_params
 
 
-def get_schema_params(tag: str):
-    if tag != 'yp':
-        raise NotImplementedError(
-            f"Such tag=`{tag}` is not implemented."
-        )
-    return DEFAULT_SCHEMA_PARAMETERS[tag][0]
+def open_schema_url(url):
+    schema = json.loads(requests.get(url).content.decode())
+    validate_schema(schema)
+    return schema
 
 
-def generate_schema(tag: str):
-    fields, index_params = get_schema_params(tag)
+def generate_schema(tag: str, schema: list = None) -> (CollectionSchema, dict):
+    if tag == 'yp':
+        schema = open_schema_url(DEFAULT_SCHEMA_URL)
+    fields, index_params = parse_schema(schema)
 
-    schema = CollectionSchema(fields=fields,
-                              description='test collection')
-    indices = [(item.name, index_params[item.name])
-               for item in fields if item.dim is not None]
+    collection_schema = CollectionSchema(
+        fields=fields,
+        description='test collection')
 
-    return schema, indices
+    return collection_schema, index_params
 
 
 def create_milvus_collection(
@@ -129,10 +138,10 @@ def create_milvus_collection(
         else:
             collection = Collection(collection_name)
             return collection
-
+    print(schema)
     collection = Collection(name=collection_name, schema=schema)
 
-    for field_name, index_params in indices:
+    for field_name, index_params in indices.items():
         collection.create_index(field_name=field_name,
                                 index_params=index_params)
     return collection
