@@ -30,6 +30,10 @@ class SEUtilsException(Exception):
 
 class BadCredentialsError(SEUtilsException):
     """ Raise when provided credentials are incorrect """
+    
+
+class ConnectionFailedError(SEUtilsException):
+    """ Raise when provided credentials are incorrect """
 
 
 class SchemaValidationError(SEUtilsException):
