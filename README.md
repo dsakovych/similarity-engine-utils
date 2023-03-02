@@ -42,8 +42,11 @@ tag = "some_tag"
 collection1 = create_milvus_collection(collection_name, tag=tag)
 
 # parse json schema
-collection_schema, index_params = generate_schema(tag=tag, schema=read_schema_json(schema_path))
-collection2 = create_milvus_collection(collection_name, schema=collection_schema, indices=index_params)
+collection_schema, index_params = generate_schema(tag=tag, 
+                                                  schema=read_schema_json(schema_path))
+collection2 = create_milvus_collection(collection_name, 
+                                       schema=collection_schema, 
+                                       indices=index_params)
 ```
 
 
@@ -60,7 +63,8 @@ kwargs = {
     "emb": [1,1,1,1]
 }
 
-insert2milvus(data=[kwargs], collection_name=collection_name)
+insert2milvus(data=[kwargs], 
+              collection_name=collection_name)
 ```
 
 ## Find the closest cluster id
@@ -72,12 +76,17 @@ from se_utils.backend.milvus.core import get_cluster_id, get_increment_cluster_i
 
 collection_name = 'test_collection'
 emb_label = 'emb'
-emb = [np.random.uniform(low=-1, high=1, size=(1024,)).tolist() for _ in range(1)][0]
+emb = [np.random.uniform(low=-1, high=1, size=(1024,)).tolist() 
+       for _ in range(1)][0]
 cluster_label = 'group_id'
 
-cluster_id = get_cluster_id(collection_name=collection_name, emb=emb, emb_label=emb_label, cluster_label=cluster_label)
+cluster_id = get_cluster_id(collection_name=collection_name, 
+                            emb=emb, 
+                            emb_label=emb_label, 
+                            cluster_label=cluster_label)
 
 if cluster_id is None:
-    cluster_id = get_increment_cluster_id(collection_name=collection_name, cluster_label=cluster_label)
+    cluster_id = get_increment_cluster_id(collection_name=collection_name, 
+                                          cluster_label=cluster_label)
 
 ```
