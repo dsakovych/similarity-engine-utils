@@ -7,3 +7,8 @@ DEFAULT_SEARCH_PARAMS = {
     },
     "offset": 0
 }
+
+# L2 distances
+VECTOR_SIM_THRESHOLDS = {
+    "google/vit-large-patch16-224-in21k": 1.4
+}

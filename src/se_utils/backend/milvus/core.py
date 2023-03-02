@@ -1,14 +1,16 @@
 import json
 import os.path
 import re
-
+import numpy as np
+import pandas as pd
 import requests
 from pymilvus import (Collection, CollectionSchema, DataType, FieldSchema,
                       connections, utility)
 
-from ...exceptions import (BadCredentialsError, MilvusInsertDataSchemaError,
-                           SchemaValidationError)
-from .conf import DEFAULT_SCHEMA_URL, DEFAULT_SEARCH_PARAMS
+from ...exceptions import (
+    BadCredentialsError, MilvusInsertDataSchemaError, SchemaValidationError,
+    MilvusFieldDescriptionAbsentError)
+from .conf import DEFAULT_SCHEMA_URL, DEFAULT_SEARCH_PARAMS, VECTOR_SIM_THRESHOLDS
 
 
 def setup_connection(milvus_credentials: dict):
@@ -52,6 +54,7 @@ def read_schema_json(x: str):
             schema_json = json.load(f)
     else:
         schema_json = json.loads(x)
+    validate_schema(schema_json)
     return schema_json
 
 
@@ -113,9 +116,16 @@ def open_schema_url(url):
     return schema
 
 
-def generate_schema(tag: str, schema: list = None) -> (CollectionSchema, dict):
+def generate_schema(
+        tag: str = None,
+        schema: list = None
+) -> (CollectionSchema, dict):
     if tag == 'yp':
         schema = open_schema_url(DEFAULT_SCHEMA_URL)
+    elif schema is None:
+        raise ValueError(f"Such tag is not supported: `{tag}`. "
+                         f"Either provide existing tag, "
+                         f"or provide valid schema")
     fields, index_params = parse_schema(schema)
 
     collection_schema = CollectionSchema(
@@ -128,15 +138,19 @@ def generate_schema(tag: str, schema: list = None) -> (CollectionSchema, dict):
 def create_milvus_collection(
         collection_name,
         tag: str = 'yp',
-        drop_existing: bool = True
+        drop_existing: bool = True,
+        schema: CollectionSchema = None,
+        indices: list[dict] = None
 ):
-    schema, indices = generate_schema(tag)
+    if schema is None and indices is None:
+        schema, indices = generate_schema(tag)
 
     if utility.has_collection(collection_name):
         if drop_existing:
             utility.drop_collection(collection_name)
         else:
             collection = Collection(collection_name)
+            collection.load()
             return collection
     collection = Collection(name=collection_name, schema=schema)
 
@@ -146,21 +160,43 @@ def create_milvus_collection(
     return collection
 
 
-def df2milvus(df, collection_name):
+def insert2milvus(data: list[dict], collection_name):
+    df = pd.DataFrame(data)
     collection = Collection(collection_name)
-    collection_fields = {_.name for _ in collection.schema.fields}
-    data_fields = set(df.columns)
+    collection_fields = [_.name for _ in collection.schema.fields]
+    data_fields = df.columns
 
-    if data_fields == collection_fields:
-        collection.insert(df)
+    absent_fields = [_ for _ in data_fields if _ not in collection_fields]
+    redundant_fields = [_ for _ in collection_fields if _ not in data_fields]
+
+    if set(data_fields) == set(collection_fields):
+        collection.insert(df[collection_fields])
         return True
-    if collection_fields - data_fields:
-        msg = f"Such fields are absent in provided df: {collection_fields - data_fields}"
-    elif data_fields - collection_fields:
-        msg = f"Such fields are redundant in provided df: {data_fields - collection_fields}"
+    if len(absent_fields) > 0:
+        msg = f"Such fields are absent " \
+              f"in provided df: {absent_fields}"
+    elif len(redundant_fields) > 0:
+        msg = f"Such fields are redundant " \
+              f"in provided df: {redundant_fields}"
     else:
         msg = f"No data fields provided: {data_fields}"
     raise MilvusInsertDataSchemaError(message=msg)
+
+
+def query_milvus_data(collection_name,
+                      output_fields,
+                      expr: str,
+                      limit: int = 10):
+    collection = Collection(collection_name)
+    collection.load()
+    res = collection.query(
+        expr=expr,
+        offset=0,
+        limit=limit,
+        output_fields=output_fields,
+        consistency_level="Strong"
+    )
+    return res
 
 
 def search_similar_vector(
@@ -187,72 +223,63 @@ def search_similar_vector(
     )
     res = [{
         "distance": i.score,
-        "values": i.entity._row_data  # {i.entity.get(j) for j in output_fields}
+        "values": {j: i.entity.get(j) for j in output_fields}  # i.entity._row_data
     }
         for i in results[0]]
     return res
 
 
-# def construct_milvus_record(
-#         id,
-#         args,
-#         path,
-#         embedding,
-#         metadata
-# ):
-#     data = [
-#         [id],
-#         [int(args['biz_id'])],
-#         [int(args['customer_id'])],
-#         [int(args['year'])],
-#         [int(args['month'])],
-#         [int(args['day'])],
-#         [args.get('mlflow_parent_run_id', '')],
-#         [args.get('mlflow_run_id', '')],
-#         [args['batch_id']],
-#         [int(args['mail_log_id'])],
-#         [args['file_name']],
-#         [path],
-#         embedding,
-#         [metadata]
-#     ]
-#     return data
-#
-#
-# def search_similar_vectors(
-#         collection_name,
-#         emb_name,
-#         data,
-#         biz_id,
-#         search_params: dict = None
-# ):
-#     collection = Collection(collection_name)
-#     collection.load()
-#
-#     if search_params is None:
-#         search_params = {"metric_type": "L2", "params": {"nprobe": 1},
-#                          "offset": 1}
-#
-#     results = collection.search(
-#         data=data,
-#         anns_field=emb_name,
-#         param=search_params,
-#         limit=10,
-#         expr=f"biz_id in [{biz_id}]",
-#         output_fields=['id', 'customer_id', 'path'],
-#         consistency_level="Strong"
+def l2_dist(a, b):
+    return np.linalg.norm(a - b)
+
+
+# def get_cluster_id(collection_name, emb, emb_label, cluster_label):
+#     # todo: use this function after this is merged https://github.com/milvus-io/milvus/issues/16538
+#     # todo: get model name from search results
+#     model_name = "google/vit-large-patch16-224-in21k"
+#     results = search_similar_vector(
+#         collection_name=collection_name,
+#         field_name=emb_label,
+#         data=emb,
+#         output_fields=[cluster_label, emb_label],
+#         limit=1
 #     )
-#     return results
-#
-#
-# def query_milvus_data(collection_name: str):
-#     collection = Collection(collection_name)
-#     collection.load()
-#     res = collection.query(
-#         expr="biz_id in [1]",
-#         offset=0,
-#         limit=10,
-#         output_fields=["path", "customer_id"],
-#         consistency_level="Strong"
-#     )
-#     return res
+#     if len(results) > 0:
+#         cluster_id = results[0]['values'][cluster_label]
+#         closest_vector = results[0]['values'][cluster_label]
+#         if l2_dist(emb, closest_vector) < VECTOR_SIM_THRESHOLDS[model_name]:
+#             return cluster_id
+
+
+def get_cluster_id(collection_name, emb, emb_label, cluster_label):
+    model_name = [item
+                  for item in Collection(collection_name).schema.fields
+                  if item.name == emb_label]
+    if len(model_name) == 0:
+        raise MilvusFieldDescriptionAbsentError(
+            message=f"Field `{emb_label}` doesn't have description")
+    model_name = model_name[0].description
+    results = search_similar_vector(
+        collection_name=collection_name,
+        field_name=emb_label,
+        data=emb,
+        output_fields=[cluster_label],
+        limit=1
+    )
+    if len(results) > 0:
+        distance = results[0]['distance']
+        cluster_id = results[0]['values'][cluster_label]
+        if distance < VECTOR_SIM_THRESHOLDS[model_name]:
+            return cluster_id
+
+
+def get_increment_cluster_id(collection_name, cluster_label):
+    results = query_milvus_data(collection_name,
+                                [cluster_label],
+                                f"{cluster_label} != -999")
+    results = pd.DataFrame(results)
+    if len(results) > 0:
+        max_cluster_value = results[cluster_label].max()
+    else:
+        max_cluster_value = 0
+    return max_cluster_value + 1

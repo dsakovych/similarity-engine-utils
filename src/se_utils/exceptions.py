@@ -45,5 +45,9 @@ class MilvusInsertDataSchemaError(SEUtilsException):
         do not coincide with milvus target collection """
 
 
+class MilvusFieldDescriptionAbsentError(SEUtilsException):
+    """ Raise when couldn't find field description """
+
+
 class ExceptionsMessage:
     BadCredentials = "provided credentials are incorrect"

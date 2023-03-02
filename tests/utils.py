@@ -3,6 +3,7 @@ import os
 import random
 import uuid
 from importlib import resources
+from pymilvus import DataType
 
 import numpy as np
 import pandas as pd
@@ -54,12 +55,13 @@ def random_field_value(field, num=1):
         "INT32": (0, 2147483647),  # -2147483648
         "INT64": (0, 2**63 - 1),  # -1 * 2**63
     }
-    if field.dtype.name == 'VARCHAR':
+    field_name = DataType(field.dtype).name if isinstance(field.dtype, int) else field.dtype.name
+    if field_name == 'VARCHAR':
         max_length = int(field.params['max_length'])
         return [str(uuid.uuid4())[:max_length] for _ in range(num)]
-    elif field.dtype.name.startswith('INT'):
-        return [random.randint(*int_mapping[field.dtype.name]) for _ in range(num)]
-    elif field.dtype.name == 'FLOAT_VECTOR':
+    elif field_name.startswith('INT'):
+        return [random.randint(*int_mapping[field_name]) for _ in range(num)]
+    elif field_name == 'FLOAT_VECTOR':
         dim = int(field.params['dim'])
         return [np.random.uniform(low=-1, high=1, size=(dim,)).tolist() for _ in range(num)]
     else:
