@@ -63,7 +63,7 @@ kwargs = {
 insert2milvus(data=[kwargs], collection_name=collection_name)
 ```
 
-## Find closest cluster id
+## Find the closest cluster id
 ---------------------------
 
 ```python
