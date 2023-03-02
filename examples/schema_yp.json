@@ -47,7 +47,7 @@
   },
   {
     "name": "path",
-    "dtype": "VARCHAR(256)"
+    "dtype": "VARCHAR(1024)"
   },
   {
     "name": "group_id",
