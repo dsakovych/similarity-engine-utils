@@ -4,22 +4,34 @@ import re
 import numpy as np
 import pandas as pd
 import requests
+from time import sleep
 from pymilvus import (Collection, CollectionSchema, DataType, FieldSchema,
                       connections, utility)
 
 from ...exceptions import (
     BadCredentialsError, MilvusInsertDataSchemaError, SchemaValidationError,
-    MilvusFieldDescriptionAbsentError)
-from .conf import DEFAULT_SCHEMA_URL, DEFAULT_SEARCH_PARAMS, VECTOR_SIM_THRESHOLDS
+    MilvusFieldDescriptionAbsentError, ConnectionFailedError)
+from .conf import DEFAULT_SCHEMA_URL, DEFAULT_SEARCH_PARAMS, \
+    VECTOR_SIM_THRESHOLDS
 
 
-def setup_connection(milvus_credentials: dict):
+def setup_connection(milvus_credentials: dict, max_n_tries=3, timeout=20):
     if milvus_credentials.keys() != {"host", "port", "alias"}:
         message = f"Provided credentials are incorrect: {milvus_credentials}"
         raise BadCredentialsError(message=message)
 
-    connections.connect(**milvus_credentials)
-    return True
+    n_tries = 0
+    while n_tries <= max_n_tries:
+        n_tries += 1
+
+        try:
+            connections.connect(**milvus_credentials)
+            return True
+        except Exception as exception:
+            print(f'Error: {exception}')
+            sleep(timeout)
+
+    return False
 
 
 def milvus_dtype_mapping(x: str):
@@ -138,7 +150,7 @@ def generate_schema(
 def create_milvus_collection(
         collection_name,
         tag: str = 'yp',
-        drop_existing: bool = True,
+        drop_existing: bool = False,
         schema: CollectionSchema = None,
         indices: list[dict] = None
 ):
@@ -183,6 +195,61 @@ def insert2milvus(data: list[dict], collection_name):
     raise MilvusInsertDataSchemaError(message=msg)
 
 
+def insert_clusterize_one_to_milvus(data: dict,
+                                    collection_name: str,
+                                    collection_schema_json: list = None,
+                                    milvus_credentials: dict = None):
+    # set up connection
+    if milvus_credentials is not None:
+        connected = setup_connection(milvus_credentials)
+
+        if not connected:
+            raise ConnectionFailedError(message='Not connected.')
+
+    # ensure collection
+    if not collection_schema_json:
+        collection = Collection(collection_name)
+    else:
+        validate_schema(collection_schema_json)
+        collection_schema, index_params = generate_schema(
+            schema=collection_schema_json)
+        collection = create_milvus_collection(collection_name,
+                                              schema=collection_schema,
+                                              indices=index_params)
+
+    # validate data 
+    collection_fields = [_.name for _ in collection.schema.fields]
+    data_fields = data.keys()
+
+    absent_fields = [_ for _ in data_fields if _ not in collection_fields]
+    redundant_fields = [_ for _ in collection_fields if _ not in data_fields]
+
+    msg = None
+    if len(absent_fields) > 0:
+        msg = f"Such fields are absent " \
+              f"in provided df: {absent_fields}"
+    elif len(redundant_fields) > 0:
+        msg = f"Such fields are redundant " \
+              f"in provided df: {redundant_fields}"
+    elif len(data_fields) == 0:
+        msg = f"No data fields provided: {data_fields}"
+    if msg is not None:
+        raise MilvusInsertDataSchemaError(message=msg)
+
+    # get cluster
+    cluster_id = get_cluster_id(collection_name=collection_name,
+                                embedding=data['embedding'])
+
+    if cluster_id is None:
+        cluster_id = get_increment_cluster_id(collection_name=collection_name)
+
+    data['cluster_id'] = cluster_id
+
+    # insert data 
+    df = pd.DataFrame([data])
+    collection.insert(df[collection_fields])
+
+
 def query_milvus_data(collection_name,
                       output_fields,
                       expr: str,
@@ -223,7 +290,8 @@ def search_similar_vector(
     )
     res = [{
         "distance": i.score,
-        "values": {j: i.entity.get(j) for j in output_fields}  # i.entity._row_data
+        "values": {j: i.entity.get(j) for j in output_fields}
+        # i.entity._row_data
     }
         for i in results[0]]
     return res
@@ -251,18 +319,19 @@ def l2_dist(a, b):
 #             return cluster_id
 
 
-def get_cluster_id(collection_name, emb, emb_label, cluster_label):
+def get_cluster_id(collection_name, embedding, embedding_label='embedding',
+                   cluster_label='cluster_id'):
     model_name = [item
                   for item in Collection(collection_name).schema.fields
-                  if item.name == emb_label]
+                  if item.name == embedding_label]
     if len(model_name) == 0:
         raise MilvusFieldDescriptionAbsentError(
-            message=f"Field `{emb_label}` doesn't have description")
+            message=f"Field `{embedding_label}` doesn't have description")
     model_name = model_name[0].description
     results = search_similar_vector(
         collection_name=collection_name,
-        field_name=emb_label,
-        data=emb,
+        field_name=embedding_label,
+        data=embedding,
         output_fields=[cluster_label],
         limit=1
     )
@@ -273,7 +342,7 @@ def get_cluster_id(collection_name, emb, emb_label, cluster_label):
             return cluster_id
 
 
-def get_increment_cluster_id(collection_name, cluster_label):
+def get_increment_cluster_id(collection_name, cluster_label='cluster_id'):
     results = query_milvus_data(collection_name,
                                 [cluster_label],
                                 f"{cluster_label} != -999")
