@@ -4,6 +4,7 @@ import re
 import numpy as np
 import pandas as pd
 import requests
+from typing import List, Dict
 from time import sleep
 from pymilvus import (Collection, CollectionSchema, DataType, FieldSchema,
                       connections, utility)
@@ -70,7 +71,7 @@ def read_schema_json(x: str):
     return schema_json
 
 
-def validate_schema(schema: list[dict]):
+def validate_schema(schema: List[Dict]):
     pk, msg = None, None
     available_keys = {'name', 'dtype', 'is_primary', 'description',
                       'index_params'}
@@ -152,7 +153,7 @@ def create_milvus_collection(
         tag: str = 'yp',
         drop_existing: bool = False,
         schema: CollectionSchema = None,
-        indices: list[dict] = None
+        indices: List[Dict] = None
 ):
     if schema is None and indices is None:
         schema, indices = generate_schema(tag)
@@ -172,7 +173,7 @@ def create_milvus_collection(
     return collection
 
 
-def insert2milvus(data: list[dict], collection_name):
+def insert2milvus(data: List[Dict], collection_name):
     df = pd.DataFrame(data)
     collection = Collection(collection_name)
     collection_fields = [_.name for _ in collection.schema.fields]
